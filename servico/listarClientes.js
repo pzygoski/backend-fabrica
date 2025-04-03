@@ -6,6 +6,6 @@ export async function listarClientes(req, res) {
         res.json(clientes);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Erro ao buscar clientes' });
+        res.status(500).json({ mensagem: 'Erro ao buscar clientes' });
     }
 }

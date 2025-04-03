@@ -5,7 +5,6 @@ const pool = mysql.createPool({
     user: 'root',
     password: 'Suporte99',
     database: 'cupcakeria',
-    ssl: { rejectUnauthorized: false }
 })
 
 export default pool;
