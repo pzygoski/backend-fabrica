@@ -6,6 +6,11 @@ export async function cadastrarCliente(req, res) {
     try {
         const {email, senha, cpf} = req.body;
 
+        const regexCPF = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/;
+        if (!regexCPF.test(cpf)) {
+            return res.status(400).json({ mensagem: 'Formato de CPF inválido. Use XXX.XXX.XXX-XX' });
+        }
+
         const [emailExistente] = await pool.query('SELECT * FROM clientes WHERE email = ?', [email]);
         if (emailExistente.length > 0) {
             return res.status(400).json({ mensagem: 'Esse e-mail já foi cadastrado, tente outro ou faça o login!'})
