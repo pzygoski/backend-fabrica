@@ -2,7 +2,7 @@ import pool from './conexao.js';
 
 export async function listarPedidosAdmin(req, res) {
     try {
-        const { filtro } = req.query; // Pode ser 'aguardando' ou 'finalizado'
+        const { filtro } = req.query;
 
         const query = `
             SELECT 
@@ -12,32 +12,72 @@ export async function listarPedidosAdmin(req, res) {
                 p.valor_total,
                 p.forma_pagamento,
                 p.status,
-                cp.id_cupcake,
-                cp.quantidade AS quantidade,
-                MAX(CASE WHEN i.tipo = 'tamanho' THEN i.nome END) AS tamanho,
-                MAX(CASE WHEN i.tipo = 'recheio' THEN i.nome END) AS recheio,
-                MAX(CASE WHEN i.tipo = 'cobertura' THEN i.nome END) AS cobertura,
-                MAX(CASE WHEN i.tipo = 'cor_cobertura' THEN i.nome END) AS cor_cobertura,
-                e.rua,
-                e.numero,
-                e.bairro,
-                e.cep,
+                i.tipo,
+                i.nome AS nome_ingrediente,
+                pi.quantidade,
+                e.rua, 
+                e.numero, 
+                e.bairro, 
+                e.cep, 
                 e.complemento
             FROM pedidos p
             JOIN clientes c ON p.id_cliente = c.id_cliente
-            JOIN cupcakes_pedido cp ON p.id_pedido = cp.id_pedido
-            JOIN cupcake_ingredientes ci ON cp.id_cupcake = ci.id_cupcake
-            JOIN ingredientes i ON ci.id_ingrediente = i.id_ingrediente
+            JOIN pedido_ingredientes pi ON p.id_pedido = pi.id_pedido
+            JOIN ingredientes i ON pi.id_ingrediente = i.id_ingrediente
             LEFT JOIN enderecos e ON p.id_cliente = e.id_cliente
             WHERE p.status = ?
-            GROUP BY p.id_pedido, cp.id_cupcake, e.rua, e.numero, e.bairro, e.cep, e.complemento
-            ORDER BY p.data_criacao DESC
+            ORDER BY p.id_pedido, pi.id_pedido_ingrediente
         `;
 
-        const status = filtro === 'finalizados' ? 'finalizado' : 'aguardando';
-        const [rows] = await pool.query(query, [status]);
+        const [rows] = await pool.query(query, [filtro || 'aguardando']);
 
-        const pedidosFormatados = rows.map(pedido => {
+        const pedidosMap = new Map();
+
+        for (const row of rows) {
+            const keyPedido = row.id_pedido;
+
+            if (!pedidosMap.has(keyPedido)) {
+                pedidosMap.set(keyPedido, {
+                    id_pedido: row.id_pedido,
+                    data_criacao: row.data_criacao,
+                    email_cliente: row.email_cliente,
+                    valor_total: row.valor_total,
+                    forma_pagamento: row.forma_pagamento,
+                    status: row.status,
+                    rua: row.rua,
+                    numero: row.numero,
+                    bairro: row.bairro,
+                    cep: row.cep,
+                    complemento: row.complemento,
+                    cupcakes: []
+                });
+            }
+
+            const pedido = pedidosMap.get(keyPedido);
+
+            // Verifica se existe um cupcake incompleto (sem os 4 tipos ainda)
+            let cupcake = pedido.cupcakes.find(c => 
+                !c.tamanho || !c.recheio || !c.cobertura || !c.cor_cobertura
+            );
+
+            // Se não existe, cria um novo
+            if (!cupcake) {
+                cupcake = {
+                    tamanho: null,
+                    recheio: null,
+                    cobertura: null,
+                    cor_cobertura: null,
+                    quantidade: row.quantidade
+                };
+                pedido.cupcakes.push(cupcake);
+            }
+
+            // Atribui o ingrediente ao tipo correto
+            cupcake[row.tipo] = row.nome_ingrediente;
+        }
+
+        // Formatando a data
+        const pedidosFormatados = Array.from(pedidosMap.values()).map(pedido => {
             const data = new Date(pedido.data_criacao);
             const dataFormatada = data.toLocaleString('pt-BR', {
                 day: '2-digit',
