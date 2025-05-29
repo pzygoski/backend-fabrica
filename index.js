@@ -7,6 +7,7 @@ import { listarClientes } from './servico/listarClientes.js';
 import { loginCliente } from './servico/loginClientes.js';
 import { listarPedidosAdmin } from './servico/listarPedidos.js';
 import { atualizarStatusPedido } from './servico/atualizarStatus.js';
+import { relatorioPedidos } from './servico/relatorio.js';
 
 dotenv.config();
 const app = express();
@@ -19,6 +20,8 @@ app.post('/login', loginCliente);
 
 app.get('/admin/pedidos', listarPedidosAdmin);
 app.put('/admin/pedidos/:id', atualizarStatusPedido);
+
+app.get('/relatorio', relatorioPedidos);
 
 app.listen(9000, () => {
     console.log(`Servidor rodando em http://localhost:9000`);
