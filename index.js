@@ -8,6 +8,10 @@ import { loginCliente } from './servico/loginClientes.js';
 import { listarPedidosAdmin } from './servico/listarPedidos.js';
 import { atualizarStatusPedido } from './servico/atualizarStatus.js';
 import { relatorioPedidos } from './servico/relatorio.js';
+import { excluirPedidoCarrinho } from './servico/excluirPedidoCarrinho.js';
+import { adicionarAoCarrinho } from './servico/adicionarAoCarrinho.js';
+import { listarCarrinho } from './servico/listarCarrinho.js';
+
 
 dotenv.config();
 const app = express();
@@ -22,6 +26,11 @@ app.get('/admin/pedidos', listarPedidosAdmin);
 app.put('/admin/pedidos/:id', atualizarStatusPedido);
 
 app.get('/relatorio', relatorioPedidos);
+
+app.post('/adicionarAoCarrinho', adicionarAoCarrinho);
+app.delete('/excluirPedidoCarrinho/:id', excluirPedidoCarrinho);
+app.get('/carrinho/:id_cliente', listarCarrinho);
+
 
 app.listen(9000, () => {
     console.log(`Servidor rodando em http://localhost:9000`);
