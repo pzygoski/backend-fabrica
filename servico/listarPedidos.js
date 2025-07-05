@@ -55,79 +55,28 @@ export async function listarPedidosAdmin(req, res) {
           bairro: row.bairro,
           cep: row.cep,
           complemento: row.complemento,
-          cupcakes: []
+          cupcakes: [] 
         });
       }
 
       const pedido = pedidosAgrupados.get(pedidoId);
 
-      // Lógica para agrupar ingredientes em cupcakes
-      // A suposição aqui é que cada 'quantidade' na tabela pedido_ingredientes
-      // representa um "slot" de cupcake ou que múltiplos ingredientes se combinam para um cupcake.
-      // A abordagem mais robusta exigiria um id_cupcake na tabela pedido_ingredientes.
-
-      // Vamos agrupar os ingredientes por id_pedido_ingrediente se você espera que cada
-      // entrada em pedido_ingredientes seja um ingrediente de um cupcake separado.
-      // Se um cupcake tem MULTIPLOS ingredientes (tamanho, recheio, cobertura, cor),
-      // então a lógica abaixo precisaria ser mais sofisticada.
-
-      // Para a estrutura atual, o mais provável é que um pedido possa ter vários
-      // "cupcakes" e cada "cupcake" é composto por um conjunto de ingredientes.
-      // Vamos tentar agrupar ingredientes que são parte do mesmo cupcake.
-      // A forma mais simples de fazer isso sem um id_cupcake explícito
-      // é agrupar os ingredientes com a mesma `quantidade` dentro do pedido.
-      // MAS ISSO É UM HACK.
-
-      // A solução mais robusta, sem alterar o DB, é: cada linha da query representa um par (pedido, ingrediente).
-      // Se um pedido tem N cupcakes, e cada cupcake tem 4 ingredientes, você terá 4*N linhas para aquele pedido.
-      // Precisamos inferir os cupcakes a partir dessas linhas.
-
       if (row.tipo && row.nome_ingrediente) {
-        // Encontra o último cupcake adicionado. Se ele ainda não tem todos os ingredientes ou
-        // se a quantidade de ingredientes para esse cupcake ainda não foi preenchida, adiciona nele.
-        // Isso é uma heurística e pode falhar se os pedidos forem muito complexos.
-
-        let lastCupcake = pedido.cupcakes[pedido.cupcakes.length - 1];
-
-        // Se o último cupcake está "completo" ou não existe, crie um novo.
-        // Um cupcake está "completo" se ele tem tamanho, recheio, cobertura e cor_cobertura.
-        // A 'quantidade' da tabela 'pedido_ingredientes' indica quantos *daquele ingrediente* foram pedidos.
-        // Se a quantidade é a mesma para um conjunto de ingredientes (tamanho, recheio, cobertura, cor),
-        // isso sugere que eles pertencem ao mesmo cupcake.
-
-        // Para simular a criação de cupcakes sem um ID de cupcake explícito:
-        // Crie um novo objeto de cupcake para cada conjunto de 4 ingredientes (tamanho, recheio, cobertura, cor_cobertura)
-        // que aparecem juntos. Isso é **muito dependente da ordem e da integridade dos dados**.
-        // A 'quantidade' na tabela 'pedido_ingredientes' se refere à quantidade daquele *ingrediente*
-        // e não à quantidade de cupcakes. Assumimos que `pi.quantidade` representa a quantidade
-        // de cupcakes que usam aquele ingrediente específico.
-
-        const quantidadeDoIngrediente = row.quantidade;
-
-        // Tenta encontrar um cupcake existente que ainda está "em construção"
-        // (faltando algum tipo de ingrediente e com a mesma quantidade)
         let cupcakeEncontrado = pedido.cupcakes.find(cp =>
-          (cp.tamanho === null || cp.recheio === null || cp.cobertura === null || cp.cor_cobertura === null) &&
-          (cp.quantidade === undefined || cp.quantidade === quantidadeDoIngrediente) // Tentativa de agrupar pela quantidade
+            cp.quantidade === row.quantidade && 
+            (cp.tamanho === null || cp.recheio === null || cp.cobertura === null || cp.cor_cobertura === null)
         );
 
         if (!cupcakeEncontrado) {
-          // Se não encontrou ou o encontrado já está "completo" (tem todos os tipos de ingredientes),
-          // cria um novo cupcake.
-          cupcakeEncontrado = {
-            tamanho: null,
-            recheio: null,
-            cobertura: null,
-            cor_cobertura: null,
-            quantidade: quantidadeDoIngrediente // Assume que a quantidade de um ingrediente é a quantidade do cupcake
-          };
-          pedido.cupcakes.push(cupcakeEncontrado);
+            cupcakeEncontrado = {
+                tamanho: null,
+                recheio: null,
+                cobertura: null,
+                cor_cobertura: null,
+                quantidade: row.quantidade 
+            };
+            pedido.cupcakes.push(cupcakeEncontrado);
         }
-        
-        // Garante que a quantidade do cupcake seja a quantidade do ingrediente atual
-        cupcakeEncontrado.quantidade = quantidadeDoIngrediente;
-
-        // Atribui o ingrediente ao campo correto do cupcake
         cupcakeEncontrado[row.tipo] = row.nome_ingrediente;
       }
     }
@@ -135,28 +84,25 @@ export async function listarPedidosAdmin(req, res) {
     const pedidosFormatados = Array.from(pedidosAgrupados.values()).map(pedido => {
       const data = new Date(pedido.data_criacao);
 
-      // Filtra cupcakes que podem ter sido criados mas não totalmente preenchidos
-      // por falta de dados na query (e.g., um pedido sem nenhum ingrediente)
       const cupcakesValidos = pedido.cupcakes.filter(cp => 
-          cp.tamanho || cp.recheio || cp.cobertura || cp.cor_cobertura
+          cp.tamanho || cp.recheio || cp.cobertura || cp.cor_cobertura || cp.quantidade
       );
 
       return {
         ...pedido,
         data_criacao: data.toLocaleString('pt-BR', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
+          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
         }),
-        cupcakes: cupcakesValidos
+        cupcakes: cupcakesValidos.length > 0 ? cupcakesValidos : [{ 
+            tamanho: 'N/A',
+            recheio: 'N/A',
+            cobertura: 'N/A',
+            cor_cobertura: 'N/A',
+            quantidade: 1 
+        }]
       };
     });
 
-    // Agrupa os pedidos por email do cliente na camada de apresentação (React)
-    // O React já faz isso, então a API deve retornar todos os pedidos.
-    // A lógica de agrupar por email do cliente no frontend é mais flexível.
 
     res.json(pedidosFormatados);
   } catch (error) {
