@@ -1,5 +1,6 @@
-// Arquivo: Sua API (por exemplo, pedidosController.js ou onde você tem listarPedidosAdmin)
-import pool from './conexao.js'; // Certifique-se de que o caminho está correto
+// servico/listarPedidos.js
+
+import pool from './conexao.js';
 
 export async function listarPedidosAdmin(req, res) {
   try {
@@ -15,7 +16,7 @@ export async function listarPedidosAdmin(req, res) {
         p.valor_total,
         p.forma_pagamento,
         p.status,
-        pi.id_pedido_ingrediente, -- Adicionado para ajudar no agrupamento
+        pi.id_pedido_ingrediente, 
         i.tipo,
         i.nome AS nome_ingrediente,
         pi.quantidade,
@@ -30,7 +31,7 @@ export async function listarPedidosAdmin(req, res) {
       LEFT JOIN ingredientes i ON pi.id_ingrediente = i.id_ingrediente
       LEFT JOIN enderecos e ON p.id_cliente = e.id_cliente
       WHERE p.status = ?
-      ORDER BY p.id_pedido, pi.id_pedido_ingrediente -- Ordenar por pedido e ingrediente para agrupamento
+      ORDER BY p.id_pedido, pi.id_pedido_ingrediente -- Adicionado ordenação por id_pedido_ingrediente para ajudar no agrupamento
     `;
 
     const [rows] = await pool.query(query, [filtro || 'aguardando']);
@@ -42,7 +43,7 @@ export async function listarPedidosAdmin(req, res) {
 
       if (!pedidosAgrupados.has(pedidoId)) {
         pedidosAgrupados.set(pedidoId, {
-          id_pedido: row.id_pedido,
+          id_pedido: pedidoId,
           data_criacao: row.data_criacao,
           id_cliente: row.id_cliente,
           email_cliente: row.email_cliente,
@@ -55,16 +56,16 @@ export async function listarPedidosAdmin(req, res) {
           bairro: row.bairro,
           cep: row.cep,
           complemento: row.complemento,
-          cupcakes: [] 
+          _cupcakesTemp: new Map() 
         });
       }
 
       const pedido = pedidosAgrupados.get(pedidoId);
 
-      if (row.tipo && row.nome_ingrediente) {
-        let cupcakeEncontrado = pedido.cupcakes.find(cp =>
-            cp.quantidade === row.quantidade && 
-            (cp.tamanho === null || cp.recheio === null || cp.cobertura === null || cp.cor_cobertura === null)
+      if (row.id_pedido_ingrediente && row.tipo && row.nome_ingrediente) {
+        let cupcakeEncontrado = Array.from(pedido._cupcakesTemp.values()).find(c => 
+            c.quantidade === row.quantidade &&
+            (c.tamanho === null || c.recheio === null || c.cobertura === null || c.cor_cobertura === null)
         );
 
         if (!cupcakeEncontrado) {
@@ -75,34 +76,44 @@ export async function listarPedidosAdmin(req, res) {
                 cor_cobertura: null,
                 quantidade: row.quantidade 
             };
-            pedido.cupcakes.push(cupcakeEncontrado);
+            pedido._cupcakesTemp.set(row.id_pedido_ingrediente, cupcakeEncontrado); 
         }
-        cupcakeEncontrado[row.tipo] = row.nome_ingrediente;
+
+        if (row.tipo && row.nome_ingrediente) {
+            cupcakeEncontrado[row.tipo] = row.nome_ingrediente;
+        }
       }
     }
 
     const pedidosFormatados = Array.from(pedidosAgrupados.values()).map(pedido => {
       const data = new Date(pedido.data_criacao);
 
-      const cupcakesValidos = pedido.cupcakes.filter(cp => 
-          cp.tamanho || cp.recheio || cp.cobertura || cp.cor_cobertura || cp.quantidade
+      const cupcakesArray = Array.from(pedido._cupcakesTemp.values());
+
+      delete pedido._cupcakesTemp;
+      
+      const cupcakesValidos = cupcakesArray.filter(cp => 
+        cp.tamanho || cp.recheio || cp.cobertura || cp.cor_cobertura || cp.quantidade > 0
       );
 
       return {
         ...pedido,
         data_criacao: data.toLocaleString('pt-BR', {
-          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
         }),
-        cupcakes: cupcakesValidos.length > 0 ? cupcakesValidos : [{ 
-            tamanho: 'N/A',
-            recheio: 'N/A',
-            cobertura: 'N/A',
-            cor_cobertura: 'N/A',
-            quantidade: 1 
-        }]
+        cupcakes: cupcakesValidos.length > 0 ? cupcakesValidos : (pedido.valor_total > 0 ? [{
+            tamanho: null,
+            recheio: null,
+            cobertura: null,
+            cor_cobertura: null,
+            quantidade: null
+        }] : [])
       };
     });
-
 
     res.json(pedidosFormatados);
   } catch (error) {
